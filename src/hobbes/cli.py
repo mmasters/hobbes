@@ -36,7 +36,7 @@ def main():
 
         hobbes update fzf
     """
-    console.print(BANNER)
+    console.print(BANNER, style="bold blue", highlight=False)
 
 
 # Register commands

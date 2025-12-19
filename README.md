@@ -1,5 +1,7 @@
 # Hobbes
 
+![Hobbes](hobbes.gif)
+
 A package manager for GitHub release binaries.
 
 Hobbes downloads binaries from GitHub releases, extracts them, and manages versions locally.

@@ -23,6 +23,7 @@ def list_packages():
     table = Table(show_header=True, header_style="bold")
     table.add_column("Package")
     table.add_column("Version")
+    table.add_column("Repo")
     table.add_column("Asset")
     table.add_column("Binaries")
     table.add_column("Pinned")
@@ -32,6 +33,7 @@ def list_packages():
         table.add_row(
             pkg.name,
             pkg.version,
+            pkg.repo,
             pkg.asset or "(source)",
             ", ".join(pkg.binaries),
             pinned,

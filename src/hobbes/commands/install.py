@@ -217,12 +217,31 @@ def install_from_source(
         archive_path.unlink(missing_ok=True)
 
 
+def find_asset_by_name(assets: list[Asset], pattern: str) -> Asset | None:
+    """Find an asset by exact name or glob pattern."""
+    import fnmatch
+
+    # Try exact match first
+    for asset in assets:
+        if asset.name == pattern:
+            return asset
+
+    # Try glob pattern match
+    for asset in assets:
+        if fnmatch.fnmatch(asset.name.lower(), pattern.lower()):
+            return asset
+
+    return None
+
+
 @click.command()
 @click.argument("repo_spec")
 @click.option("--version", "-v", "version_tag", help="Specific version/tag to install")
 @click.option("--force", "-f", is_flag=True, help="Force reinstall if already installed")
 @click.option("--source", "-s", is_flag=True, help="Install from source (for script-only repos)")
-def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
+@click.option("--asset", "-a", "asset_pattern", help="Specific asset name or pattern to install")
+@click.option("--list-assets", "-l", is_flag=True, help="List available assets and exit")
+def install(repo_spec: str, version_tag: str | None, force: bool, source: bool, asset_pattern: str | None, list_assets: bool):
     """Install a package from GitHub releases.
 
     REPO_SPEC can be:
@@ -230,6 +249,7 @@ def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
       - Full GitHub URL (e.g., https://github.com/junegunn/fzf)
 
     Use --source for repositories that only provide source releases (like neofetch).
+    Use --asset to specify which release asset to install (exact name or glob pattern).
     """
     config = get_config()
     config.ensure_dirs()
@@ -267,6 +287,17 @@ def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
 
         console.print(f"  Found release: [green]{release.tag_name}[/green]")
 
+        # If --list-assets, show assets and exit
+        if list_assets:
+            if not release.assets:
+                console.print("\n[yellow]No assets in this release[/yellow]")
+            else:
+                console.print(f"\n[bold]Available assets ({len(release.assets)}):[/bold]")
+                for a in release.assets:
+                    size_mb = a.size / (1024 * 1024)
+                    console.print(f"  [cyan]{a.name}[/cyan] ({size_mb:.1f} MB)")
+            raise SystemExit(0)
+
         # If --source flag, skip binary search
         if source:
             console.print("  [dim]Installing from source (--source flag)[/dim]")
@@ -274,7 +305,21 @@ def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
                 raise SystemExit(0)
             raise SystemExit(1)
 
-        # Try to find binary asset
+        # If --asset specified, find that specific asset
+        if asset_pattern:
+            asset = find_asset_by_name(release.assets, asset_pattern)
+            if asset is None:
+                console.print(f"[red]Error:[/red] No asset matching '{asset_pattern}'")
+                console.print("\nAvailable assets:")
+                for a in release.assets:
+                    console.print(f"  - {a.name}")
+                raise SystemExit(1)
+
+            if install_from_binary(release, asset, owner, repo, manifest, config):
+                raise SystemExit(0)
+            raise SystemExit(1)
+
+        # Try to find binary asset automatically
         platform_info = get_platform_info()
         console.print(f"  Platform: {platform_info.os}/{platform_info.arch}")
 
@@ -294,6 +339,7 @@ def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
             console.print("Available assets:")
             for a in release.assets:
                 console.print(f"  - {a.name}")
+            console.print("\n[dim]Tip: Use --asset <name> to install a specific asset[/dim]")
         else:
             console.print("[yellow]This release has no binary assets[/yellow]")
 

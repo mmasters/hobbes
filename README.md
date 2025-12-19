@@ -47,7 +47,12 @@ hobbes install https://github.com/BurntSushi/ripgrep
 
 # Install specific version
 hobbes install sharkdp/bat --version v0.24.0
+
+# Install from source (for repos without binaries, like neofetch)
+hobbes install dylanaraps/neofetch --source
 ```
+
+For repositories that only provide source releases (no pre-built binaries), hobbes will automatically detect executable scripts and offer to install them.
 
 ### List installed packages
 

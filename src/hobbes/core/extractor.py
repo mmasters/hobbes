@@ -66,6 +66,59 @@ def find_executables(directory: Path) -> list[Path]:
     return executables
 
 
+def is_script(path: Path) -> bool:
+    """Check if a file is an executable script (has shebang)."""
+    if not path.is_file():
+        return False
+
+    try:
+        with open(path, "rb") as f:
+            header = f.read(2)
+            return header == b"#!"
+    except (IOError, OSError):
+        return False
+
+
+def find_scripts(directory: Path, repo_name: str | None = None) -> list[Path]:
+    """Find script files in a source directory.
+
+    Looks for files with shebangs, prioritizing those matching repo_name.
+    Excludes common non-entry-point scripts.
+    """
+    exclude_patterns = {
+        "test", "tests", "spec", "specs", "example", "examples",
+        "doc", "docs", "build", "dist", ".git", "node_modules",
+        "vendor", "__pycache__", ".github",
+    }
+    exclude_extensions = {".md", ".txt", ".rst", ".json", ".yaml", ".yml", ".toml"}
+
+    scripts = []
+
+    for item in directory.rglob("*"):
+        if not item.is_file():
+            continue
+
+        # Skip files in excluded directories
+        if any(part.lower() in exclude_patterns for part in item.parts):
+            continue
+
+        # Skip files with excluded extensions
+        if item.suffix.lower() in exclude_extensions:
+            continue
+
+        if is_script(item):
+            scripts.append(item)
+
+    # Sort: prioritize scripts matching repo name, then by path depth (shallower first)
+    def sort_key(p: Path) -> tuple[int, int, str]:
+        name_match = 0 if (repo_name and p.stem.lower() == repo_name.lower()) else 1
+        depth = len(p.relative_to(directory).parts)
+        return (name_match, depth, p.name.lower())
+
+    scripts.sort(key=sort_key)
+    return scripts
+
+
 def make_executable(path: Path) -> None:
     """Make a file executable."""
     current = path.stat().st_mode

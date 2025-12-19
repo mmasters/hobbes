@@ -1,9 +1,11 @@
 """Install command implementation."""
 
 from datetime import datetime
+from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.prompt import Confirm
 
 from hobbes.core.config import get_config
 from hobbes.core.github import GitHubClient, GitHubError, parse_repo_spec
@@ -12,26 +14,222 @@ from hobbes.core.downloader import download_file, DownloadError
 from hobbes.core.extractor import (
     extract_archive,
     install_binaries,
+    find_scripts,
+    make_executable,
     cleanup_temp_dir,
     ExtractionError,
 )
 from hobbes.core.checksum import verify_checksum, ChecksumError
 from hobbes.core.manifest import Manifest
 from hobbes.models.package import Package
+from hobbes.models.release import Release, Asset
 
 console = Console()
+
+
+def install_from_binary(
+    release: Release,
+    asset: Asset,
+    owner: str,
+    repo: str,
+    manifest: Manifest,
+    config,
+) -> bool:
+    """Install from a binary asset. Returns True on success."""
+    console.print(f"  Selected asset: [cyan]{asset.name}[/cyan]")
+
+    # Download
+    try:
+        archive_path = download_file(asset.download_url, filename=asset.name)
+    except DownloadError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return False
+
+    # Verify checksum
+    try:
+        verify_checksum(archive_path, release.assets, asset)
+        console.print("  [green]✓[/green] Checksum verified")
+    except ChecksumError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        archive_path.unlink(missing_ok=True)
+        return False
+
+    # Extract and install
+    temp_dir = None
+    try:
+        temp_dir = extract_archive(archive_path)
+        binaries = install_binaries(temp_dir)
+
+        if not binaries:
+            console.print("[red]Error:[/red] No executable binaries found in archive")
+            return False
+
+        console.print(f"  Installed binaries: {', '.join(binaries)}")
+
+        # Update manifest
+        package = Package(
+            name=repo,
+            repo=f"{owner}/{repo}",
+            version=release.version,
+            tag=release.tag_name,
+            installed_at=datetime.now(),
+            binaries=binaries,
+            asset=asset.name,
+        )
+        manifest.add(package)
+
+        console.print(
+            f"\n[green]✓[/green] Successfully installed [bold]{repo}[/bold] {release.version}"
+        )
+        console.print(f"\n[dim]Make sure {config.bin_dir} is in your PATH[/dim]")
+        return True
+
+    except ExtractionError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return False
+    finally:
+        if temp_dir:
+            cleanup_temp_dir(temp_dir)
+        archive_path.unlink(missing_ok=True)
+
+
+def install_from_source(
+    release: Release,
+    owner: str,
+    repo: str,
+    manifest: Manifest,
+    config,
+) -> bool:
+    """Install scripts from source tarball. Returns True on success."""
+    if not release.tarball_url:
+        console.print("[red]Error:[/red] No source tarball available")
+        return False
+
+    console.print("  Downloading source tarball...")
+
+    # Download source
+    try:
+        tarball_name = f"{repo}-{release.tag_name}.tar.gz"
+        archive_path = download_file(release.tarball_url, filename=tarball_name)
+    except DownloadError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return False
+
+    # Extract and find scripts
+    temp_dir = None
+    try:
+        temp_dir = extract_archive(archive_path)
+        scripts = find_scripts(temp_dir, repo_name=repo)
+
+        if not scripts:
+            console.print("[yellow]No executable scripts found in source[/yellow]")
+            return False
+
+        # Show found scripts
+        console.print(f"\n  Found {len(scripts)} script(s):")
+        for i, script in enumerate(scripts[:10]):  # Limit display
+            rel_path = script.relative_to(temp_dir)
+            # Read shebang to show interpreter
+            with open(script, "rb") as f:
+                shebang = f.readline().decode("utf-8", errors="ignore").strip()
+            console.print(f"    {i+1}. [cyan]{script.name}[/cyan] ({shebang})")
+            if script.name.lower() == repo.lower():
+                console.print(f"       [green]↑ matches repo name[/green]")
+
+        if len(scripts) > 10:
+            console.print(f"    ... and {len(scripts) - 10} more")
+
+        # Prompt for confirmation
+        console.print("")
+        if not Confirm.ask("Install these scripts?", default=True):
+            console.print("Installation cancelled")
+            return False
+
+        # Install scripts
+        bin_dir = config.bin_dir
+        bin_dir.mkdir(parents=True, exist_ok=True)
+
+        installed = []
+        for script in scripts:
+            # For source installs, only install scripts matching repo name
+            # or scripts in the root/bin directory
+            rel_parts = script.relative_to(temp_dir).parts
+            # Skip if deeply nested (more than 2 levels in extracted dir)
+            if len(rel_parts) > 3:
+                continue
+
+            dest = bin_dir / script.name
+            import shutil
+            shutil.copy2(script, dest)
+            make_executable(dest)
+            installed.append(script.name)
+
+        if not installed:
+            # Fall back to installing the first script that matches repo name
+            for script in scripts:
+                if script.name.lower() == repo.lower():
+                    dest = bin_dir / script.name
+                    import shutil
+                    shutil.copy2(script, dest)
+                    make_executable(dest)
+                    installed.append(script.name)
+                    break
+
+            if not installed and scripts:
+                # Just install the first one
+                script = scripts[0]
+                dest = bin_dir / script.name
+                import shutil
+                shutil.copy2(script, dest)
+                make_executable(dest)
+                installed.append(script.name)
+
+        if not installed:
+            console.print("[red]Error:[/red] No scripts installed")
+            return False
+
+        console.print(f"  Installed scripts: {', '.join(installed)}")
+
+        # Update manifest
+        package = Package(
+            name=repo,
+            repo=f"{owner}/{repo}",
+            version=release.version,
+            tag=release.tag_name,
+            installed_at=datetime.now(),
+            binaries=installed,
+            asset="(source)",
+        )
+        manifest.add(package)
+
+        console.print(
+            f"\n[green]✓[/green] Successfully installed [bold]{repo}[/bold] {release.version} from source"
+        )
+        console.print(f"\n[dim]Make sure {config.bin_dir} is in your PATH[/dim]")
+        return True
+
+    except ExtractionError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return False
+    finally:
+        if temp_dir:
+            cleanup_temp_dir(temp_dir)
+        archive_path.unlink(missing_ok=True)
 
 
 @click.command()
 @click.argument("repo_spec")
 @click.option("--version", "-v", "version_tag", help="Specific version/tag to install")
 @click.option("--force", "-f", is_flag=True, help="Force reinstall if already installed")
-def install(repo_spec: str, version_tag: str | None, force: bool):
+@click.option("--source", "-s", is_flag=True, help="Install from source (for script-only repos)")
+def install(repo_spec: str, version_tag: str | None, force: bool, source: bool):
     """Install a package from GitHub releases.
 
     REPO_SPEC can be:
       - owner/repo format (e.g., junegunn/fzf)
       - Full GitHub URL (e.g., https://github.com/junegunn/fzf)
+
+    Use --source for repositories that only provide source releases (like neofetch).
     """
     config = get_config()
     config.ensure_dirs()
@@ -69,73 +267,40 @@ def install(repo_spec: str, version_tag: str | None, force: bool):
 
         console.print(f"  Found release: [green]{release.tag_name}[/green]")
 
-        # Find best matching asset
+        # If --source flag, skip binary search
+        if source:
+            console.print("  [dim]Installing from source (--source flag)[/dim]")
+            if install_from_source(release, owner, repo, manifest, config):
+                raise SystemExit(0)
+            raise SystemExit(1)
+
+        # Try to find binary asset
         platform_info = get_platform_info()
         console.print(f"  Platform: {platform_info.os}/{platform_info.arch}")
 
         asset = find_best_asset(release.assets, platform_info)
-        if asset is None:
+
+        if asset is not None:
+            # Found a binary, install it
+            if install_from_binary(release, asset, owner, repo, manifest, config):
+                raise SystemExit(0)
+            raise SystemExit(1)
+
+        # No binary found - offer source install
+        if release.assets:
             console.print(
-                f"[red]Error:[/red] No compatible binary found for {platform_info.os}/{platform_info.arch}"
+                f"[yellow]No compatible binary found for {platform_info.os}/{platform_info.arch}[/yellow]"
             )
             console.print("Available assets:")
             for a in release.assets:
                 console.print(f"  - {a.name}")
-            raise SystemExit(1)
+        else:
+            console.print("[yellow]This release has no binary assets[/yellow]")
 
-        console.print(f"  Selected asset: [cyan]{asset.name}[/cyan]")
+        # Prompt for source install
+        console.print("")
+        if Confirm.ask("Try installing from source?", default=True):
+            if install_from_source(release, owner, repo, manifest, config):
+                raise SystemExit(0)
 
-        # Download
-        try:
-            archive_path = download_file(asset.download_url, filename=asset.name)
-        except DownloadError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise SystemExit(1)
-
-        # Verify checksum
-        try:
-            verify_checksum(archive_path, release.assets, asset)
-            console.print("  [green]✓[/green] Checksum verified")
-        except ChecksumError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            archive_path.unlink(missing_ok=True)
-            raise SystemExit(1)
-
-        # Extract and install
-        temp_dir = None
-        try:
-            temp_dir = extract_archive(archive_path)
-            binaries = install_binaries(temp_dir)
-
-            if not binaries:
-                console.print("[red]Error:[/red] No executable binaries found in archive")
-                raise SystemExit(1)
-
-            console.print(f"  Installed binaries: {', '.join(binaries)}")
-
-        except ExtractionError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise SystemExit(1)
-        finally:
-            if temp_dir:
-                cleanup_temp_dir(temp_dir)
-            archive_path.unlink(missing_ok=True)
-
-        # Update manifest
-        package = Package(
-            name=repo,
-            repo=f"{owner}/{repo}",
-            version=release.version,
-            tag=release.tag_name,
-            installed_at=datetime.now(),
-            binaries=binaries,
-            asset=asset.name,
-        )
-        manifest.add(package)
-
-        console.print(
-            f"\n[green]✓[/green] Successfully installed [bold]{repo}[/bold] {release.version}"
-        )
-        console.print(
-            f"\n[dim]Make sure {config.bin_dir} is in your PATH[/dim]"
-        )
+        raise SystemExit(1)

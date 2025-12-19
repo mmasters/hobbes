@@ -33,6 +33,8 @@ class Release:
     draft: bool
     assets: list[Asset]
     published_at: str
+    tarball_url: str = ""
+    zipball_url: str = ""
 
     @classmethod
     def from_api_response(cls, data: dict) -> "Release":
@@ -45,6 +47,8 @@ class Release:
             draft=data.get("draft", False),
             assets=assets,
             published_at=data.get("published_at", ""),
+            tarball_url=data.get("tarball_url", ""),
+            zipball_url=data.get("zipball_url", ""),
         )
 
     @property

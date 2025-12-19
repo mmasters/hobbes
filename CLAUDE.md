@@ -51,6 +51,7 @@ src/hobbes/
 - **Platform matching**: `core/platform.py` scores assets by OS/arch patterns in filename. Higher score = better match.
 - **Manifest**: YAML file at `~/.hobbes/manifest.yaml` tracks all installed packages with version, binaries list, pinned status.
 - **Binary detection**: `core/extractor.py` uses file magic bytes (ELF, Mach-O, PE, shebang) to identify executables in archives.
+- **Source install fallback**: When no binary assets are found, hobbes can install from source by detecting executable scripts (files with shebangs).
 - **No auth required**: Public repos only, no GitHub token needed.
 
 ## Dependencies

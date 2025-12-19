@@ -4,7 +4,7 @@ import click
 from rich.console import Console
 
 from hobbes import __version__
-from hobbes.commands import install, uninstall, update, list_cmd, search, info, outdated, pin
+from hobbes.commands import install, uninstall, update, list_cmd, search, info, outdated, pin, self_update
 
 console = Console()
 
@@ -40,6 +40,7 @@ main.add_command(info.info)
 main.add_command(outdated.outdated)
 main.add_command(pin.pin)
 main.add_command(pin.unpin)
+main.add_command(self_update.self_update)
 
 
 if __name__ == "__main__":

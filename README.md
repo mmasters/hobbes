@@ -98,11 +98,28 @@ hobbes pin fzf
 hobbes unpin fzf
 ```
 
-### Uninstall
+### Uninstall a package
 
 ```bash
 hobbes uninstall fzf
 ```
+
+### Uninstall hobbes
+
+To completely remove hobbes from your system:
+
+```bash
+# Remove hobbes and all installed packages
+rm -rf ~/.hobbes
+
+# If installed with pip
+pip uninstall hobbes
+
+# If installed with pipx
+pipx uninstall hobbes
+```
+
+Don't forget to remove the PATH export from your shell profile (`~/.bashrc`, `~/.zshrc`, etc.).
 
 ## Configuration
 

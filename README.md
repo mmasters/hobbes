@@ -6,22 +6,22 @@ Hobbes downloads binaries from GitHub releases, extracts them, and manages versi
 
 ## Installation
 
-### Using pip
-
-```bash
-pip install hobbes
-```
-
-### Using pipx (recommended)
-
-```bash
-pipx install hobbes
-```
-
-### One-liner
+### One-liner (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mmasters/hobbes/main/scripts/install.sh | bash
+```
+
+### Using pip
+
+```bash
+pip install git+https://github.com/mmasters/hobbes.git
+```
+
+### Using pipx
+
+```bash
+pipx install git+https://github.com/mmasters/hobbes.git
 ```
 
 ## Setup

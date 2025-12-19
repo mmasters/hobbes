@@ -23,13 +23,15 @@ if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR"
     exit 1
 fi
 
+REPO_URL="git+https://github.com/mmasters/hobbes.git"
+
 # Prefer pipx if available
 if command -v pipx &> /dev/null; then
     echo "Installing with pipx..."
-    pipx install hobbes
+    pipx install "$REPO_URL"
 else
     echo "Installing with pip..."
-    pip3 install --user hobbes
+    pip3 install --user "$REPO_URL"
 fi
 
 # Create hobbes directories

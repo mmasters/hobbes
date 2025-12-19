@@ -9,7 +9,7 @@ from rich.prompt import Confirm
 
 from hobbes.core.config import get_config
 from hobbes.core.github import GitHubClient, GitHubError, parse_repo_spec
-from hobbes.core.platform import find_best_asset, get_platform_info
+from hobbes.core.platform import find_best_asset, find_best_assets, get_platform_info
 from hobbes.core.downloader import download_file, DownloadError
 from hobbes.core.extractor import (
     extract_archive,
@@ -323,10 +323,34 @@ def install(repo_spec: str, version_tag: str | None, force: bool, source: bool, 
         platform_info = get_platform_info()
         console.print(f"  Platform: {platform_info.os}/{platform_info.arch}")
 
-        asset = find_best_asset(release.assets, platform_info)
+        matching_assets = find_best_assets(release.assets, platform_info)
 
-        if asset is not None:
-            # Found a binary, install it
+        if len(matching_assets) == 1:
+            # Single best match, install it
+            asset = matching_assets[0]
+            if install_from_binary(release, asset, owner, repo, manifest, config):
+                raise SystemExit(0)
+            raise SystemExit(1)
+
+        elif len(matching_assets) > 1:
+            # Multiple equally-good matches, prompt user to choose
+            console.print(f"\n[yellow]Multiple compatible assets found:[/yellow]")
+            for i, a in enumerate(matching_assets, 1):
+                size_mb = a.size / (1024 * 1024)
+                console.print(f"  {i}. [cyan]{a.name}[/cyan] ({size_mb:.1f} MB)")
+
+            console.print("")
+            while True:
+                choice = click.prompt(
+                    "Select asset number",
+                    type=int,
+                    default=1,
+                )
+                if 1 <= choice <= len(matching_assets):
+                    asset = matching_assets[choice - 1]
+                    break
+                console.print(f"[red]Please enter a number between 1 and {len(matching_assets)}[/red]")
+
             if install_from_binary(release, asset, owner, repo, manifest, config):
                 raise SystemExit(0)
             raise SystemExit(1)

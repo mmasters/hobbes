@@ -118,8 +118,11 @@ def score_asset(asset: Asset, platform_info: PlatformInfo) -> int:
     return score
 
 
-def find_best_asset(assets: list[Asset], platform_info: PlatformInfo | None = None) -> Asset | None:
-    """Find the best matching asset for the current platform."""
+def find_best_assets(assets: list[Asset], platform_info: PlatformInfo | None = None) -> list[Asset]:
+    """Find all matching assets with the highest score for the current platform.
+
+    Returns multiple assets if they tie for the highest score.
+    """
     if platform_info is None:
         platform_info = PlatformInfo.detect()
 
@@ -130,11 +133,20 @@ def find_best_asset(assets: list[Asset], platform_info: PlatformInfo | None = No
             scored.append((score, asset))
 
     if not scored:
-        return None
+        return []
 
     # Sort by score descending
     scored.sort(key=lambda x: x[0], reverse=True)
-    return scored[0][1]
+
+    # Return all assets with the top score
+    top_score = scored[0][0]
+    return [asset for score, asset in scored if score == top_score]
+
+
+def find_best_asset(assets: list[Asset], platform_info: PlatformInfo | None = None) -> Asset | None:
+    """Find the best matching asset for the current platform."""
+    best = find_best_assets(assets, platform_info)
+    return best[0] if best else None
 
 
 def get_platform_info() -> PlatformInfo:

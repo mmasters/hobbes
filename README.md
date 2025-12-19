@@ -21,7 +21,7 @@ pipx install hobbes
 ### One-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/hobbes/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mmasters/hobbes/main/scripts/install.sh | bash
 ```
 
 ## Setup

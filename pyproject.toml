@@ -43,8 +43,8 @@ dev = [
 hobbes = "hobbes.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/hobbes"
-Repository = "https://github.com/yourusername/hobbes"
+Homepage = "https://github.com/mmasters/hobbes"
+Repository = "https://github.com/mmasters/hobbes"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hobbes"]

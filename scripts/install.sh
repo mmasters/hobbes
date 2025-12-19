@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hobbes installer script
-# Usage: curl -fsSL https://raw.githubusercontent.com/yourusername/hobbes/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/mmasters/hobbes/main/scripts/install.sh | bash
 
 set -e
 

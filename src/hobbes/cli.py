@@ -8,6 +8,16 @@ from hobbes.commands import install, uninstall, update, list_cmd, search, info, 
 
 console = Console()
 
+BANNER = r"""
+ __              __       __
+/\ \            /\ \     /\ \
+\ \ \___     ___\ \ \____\ \ \____     __    ____
+ \ \  _ `\  / __`\ \ '__`\\ \ '__`\  /'__`\ /',__\
+  \ \ \ \ \/\ \L\ \ \ \L\ \\ \ \L\ \/\  __//\__, `\
+   \ \_\ \_\ \____/\ \_,__/ \ \_,__/\ \____\/\____/
+    \/_/\/_/\/___/  \/___/   \/___/  \/____/\/___/
+"""
+
 
 @click.group()
 @click.version_option(version=__version__, prog_name="hobbes")
@@ -26,7 +36,7 @@ def main():
 
         hobbes update fzf
     """
-    pass
+    console.print(BANNER, style="bold blue")
 
 
 # Register commands
